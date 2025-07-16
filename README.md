@@ -210,8 +210,8 @@ pingコマンドの後には、一個空欄を開けて、通信確認をした�
 
 ```bash
 $ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' my-docker-network-api-server-1
-
-$ ping 
+172.24.0.2
+$ ping 172.24.0.2
 PING 172.24.0.2 (172.24.0.2) 56(84) bytes of data.
 64 bytes from 172.24.0.2: icmp_seq=1 ttl=64 time=0.573 ms
 64 bytes from 172.24.0.2: icmp_seq=2 ttl=64 time=0.074 ms
@@ -239,8 +239,8 @@ seisom@LAPTOP-P5CT19JG:~/my-docker-network$
 
 ```bash
 $ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' my-docker-network-api-server-internal-1
-
-$ ping 
+172.23.0.5
+$ ping 172.23.0.5
 PING 172.23.0.5 (172.23.0.5) 56(84) bytes of data.
 64 bytes from 172.23.0.5: icmp_seq=1 ttl=64 time=0.682 ms
 64 bytes from 172.23.0.5: icmp_seq=2 ttl=64 time=0.082 ms
