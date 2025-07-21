@@ -264,6 +264,95 @@ seisom@LAPTOP-P5CT19JG:~/my-docker-network$
 
 DMZ、内部ネットワークの両方で通信が確認できた。
 
+## nmapでポートスキャンを行う
+---
+
+以下は、DMZと内部ネットワークの中のAPIサーバ、内部ネットワーク(データベース、サーバ)、DMZ(webサーバ)のコンテナについてのスキャンを行った結果である。
+
+```bash
+$ docker run -it --rm --network my-docker-network_internal-net instrumentisto/nmap nmap internal-server
+Unable to find image 'instrumentisto/nmap:latest' locally
+latest: Pulling from instrumentisto/nmap
+9824c27679d3: Pull complete
+5410630e007a: Pull complete
+e5da4a54c84a: Pull complete
+Digest: sha256:5d8a634e7d6cb95f26a1a18b33df7e07a2d6db9278854e0a2bf4a8396c1a9d07
+Status: Downloaded newer image for instrumentisto/nmap:latest
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-07-21 12:27 UTC
+Failed to resolve "nmap".
+Nmap scan report for internal-server (172.23.0.5)
+Host is up (0.000013s latency).
+rDNS record for 172.23.0.5: my-docker-network-internal-server-1.my-docker-network_internal-net
+All 1000 scanned ports on internal-server (172.23.0.5) are in ignored states.
+Not shown: 1000 closed tcp ports (reset)
+MAC Address: 02:51:FD:20:5E:5D (Unknown)
+
+Nmap done: 1 IP address (1 host up) scanned in 0.47 seconds
+
+$ docker run -it --rm --network my-docker-network_internal-net instrumentisto/nmap nmap internal-db
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-07-21 12:28 UTC
+Failed to resolve "nmap".
+Nmap scan report for internal-db (172.23.0.3)
+Host is up (0.000012s latency).
+rDNS record for 172.23.0.3: my-docker-network-internal-db-1.my-docker-network_internal-net
+Not shown: 999 closed tcp ports (reset)
+PORT     STATE SERVICE
+3306/tcp open  mysql
+MAC Address: 56:A9:4D:EE:56:1D (Unknown)
+
+Nmap done: 1 IP address (1 host up) scanned in 0.40 seconds
+
+$ docker run -it --rm --network my-docker-network_internal-net instrumentisto/nmap nmap api-server-internal
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-07-21 12:29 UTC
+Failed to resolve "nmap".
+Nmap scan report for api-server-internal (172.23.0.2)
+Host is up (0.000013s latency).
+rDNS record for 172.23.0.2: my-docker-network-api-server-internal-1.my-docker-network_internal-net
+Not shown: 999 closed tcp ports (reset)
+PORT     STATE SERVICE
+5000/tcp open  upnp
+MAC Address: 42:59:6C:92:54:CE (Unknown)
+
+Nmap done: 1 IP address (1 host up) scanned in 0.43 seconds
+$ docker run -it --rm --network my-docker-network_dmz-net instrumentisto/nmap nmap api-server
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-07-21 12:55 UTC
+Failed to resolve "nmap".
+Nmap scan report for api-server (172.24.0.2)
+Host is up (0.000013s latency).
+rDNS record for 172.24.0.2: my-docker-network-api-server-1.my-docker-network_dmz-net
+Not shown: 999 closed tcp ports (reset)
+PORT     STATE SERVICE
+4000/tcp open  remoteanything
+MAC Address: 32:B7:CC:08:91:04 (Unknown)
+
+Nmap done: 1 IP address (1 host up) scanned in 0.43 seconds
+
+$ docker run -it --rm --network my-docker-network_dmz-net instrumentisto/nmap nmap  web-servs
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-07-21 12:56 UTC
+Failed to resolve "nmap".
+Nmap scan report for web-servs (172.24.0.4)
+Host is up (0.000012s latency).
+rDNS record for 172.24.0.4: my-docker-network-web-servs-1.my-docker-network_dmz-net
+Not shown: 999 closed tcp ports (reset)
+PORT   STATE SERVICE
+80/tcp open  http
+MAC Address: 8A:90:3A:33:66:08 (Unknown)
+
+Nmap done: 1 IP address (1 host up) scanned in 0.46 seconds
+```
+
+| コンテナ名          | ポート番号 | 状態  | サービス名  |
+|---------------------|------------|-------|-------------|
+| internal-server      | closed        | 全閉  | -           |
+| internal-db          | 3306       | open  | mysql       |
+| api-server-internal  | 5000       | open  | upnp        |
+| api-server           | 4000       | open  | remoteanything |
+| web-servs            | 80         | open  | http        |
+
+- remoteanythingについて
+
+  これは、nmapのデフォルトのポートであり、サービスの名前ではないです。
+
 
 
 
