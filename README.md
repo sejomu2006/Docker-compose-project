@@ -408,6 +408,18 @@ $ ip link show | grep br-
   
   このコマンドの中に入ってるFORWARDというものは、Linuxのiptables(パケットフィルタリング機能)におけるチェインの一つです。
 
+- ファイアウォールを永続的にさせるために
 
+iptablesで設定したルールは、OSを再起動すると消えてしまいます。  
+そのため、以下の手順で永続化を行う必要があります。
 
+- 以下のコマンドの途中に設定の確認でyesかnoを選択する場面がありますが、すべてyesで大丈夫です。
+ ```bash
+ $ sudo apt install iptables-persistent
+ ```
 
+- 以下のコマンドは、現在のiptables(IPv4)のルール設定をファイルに保存するコマンドです。
+
+```bash
+$ sudo iptables-save | sudo tee /etc/iptables/rules.v4
+```
