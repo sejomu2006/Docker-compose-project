@@ -354,5 +354,60 @@ Nmap done: 1 IP address (1 host up) scanned in 0.46 seconds
   これは、nmapのデフォルトのポートであり、サービスの名前ではないです。
 
 
+## ファイアウォールの設置(ネットワーク間)
+---
+
+- 目的
+  
+Docker Compose には、異なるネットワーク間での通信を細かく制御する機能はありません。そこで、明示的に通信を遮断するためにファイアウォール（iptables）を利用しました。
+## 設置方法
+- ネットワーク名の確認
+
+```bash
+$ docker network ls
+NETWORK ID     NAME                             DRIVER    SCOPE
+e1198e6d04aa   my-docker-network_dmz-net        bridge    local
+fba4cc2edb93   my-docker-network_internal-net   bridge    local
+```
+
+NAMEに書かれているものがネットワーク名です。このネットワーク名を用いて通信の制御を行います。
+
+- ファイアウォールの設置でつまずいていた部分
+
+以下の記録に、docker network inspect my-docker-network_dmz-net | grep "com.docker.network.bridge.name"　というコマンドがあるが、これはネットワーク名からブリッジ名を表示させようとして失敗している。そこで、ネットワーク名を明記せずにブリッジを表示するコマンド( ip link show | grep br-)で対処した。
+
+```bash
+$ docker network inspect my-docker-network_dmz-net | grep "com.docker.network.bridge.name"
+$ docker network inspect my-docker-network_internal-net | grep "com.docker.network.bridge.name"
+$ ip link show | grep br-
+3: br-e1198e6d04aa: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default
+4: br-f35992645f42: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default
+5: br-fba4cc2edb93: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default
+6: br-09f9b00bb76a: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default
+7: br-15f6afe0212b: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default
+9: br-a908670cf30b: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default
+10: br-e0e6aa3e4816: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default
+11: veth91260ee@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-fba4cc2edb93 state UP mode DEFAULT group default
+12: veth979d698@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-e1198e6d04aa state UP mode DEFAULT group default
+
+
+```
+
+- 設置のためのコマンド
+
+  ```bash
+  $ sudo iptables -I FORWARD -i br-e1198e6d04aa -o br-fba4cc2edb93 -j DROP
+  [sudo] password for seisom:
+ 
+  ```
+
+このコマンドは、-i以降にDMZのネットワークの名前を書き、-o以降には内部ネットワークの名前を書いた。これを実行すると、DMZ
+から内部ネットワークへの通信が遮断される。また、内部ネットワークからDMZへの通信は可能である。
+
+- FORWARDについて
+  
+  このコマンドの中に入ってるFORWARDというものは、Linuxのiptables(パケットフィルタリング機能)におけるチェインの一つです。
+
+
 
 
