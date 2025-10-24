@@ -1,7 +1,9 @@
 # Docker-compose-project
-Docker Compose で仮想ネットワークを構築し、ファイアウォールの導入と通信制御の挙動を検証するセキュリティ学習用プロジェクトです。
-
---
+Docker Compose を用いて仮想ネットワークを構築し、
+ファイアウォールの導入による通信制御の挙動を検証する。
+さらに、監視ツール（ELKスタック＋Suricata）を実装し、
+ネットワーク上の通信を可視化・分析するセキュリティ学習用プロジェクトです。
+---
 
 ※※注意事項※※  
 - この環境はインターネットとは接続されていません。
@@ -42,6 +44,38 @@ services:
     command: tail -f /dev/null
     networks:
       - dmz-net
+  fake-api:
+    build:
+      context:  ./fake-api
+      dockerfile: Dockerfile.dmz
+    networks:
+      - dmz-net
+    ports:
+      - "7000:7000"
+    restart: unless-stopped
+
+  fake-db:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: 　#任意のパスワード
+      MYSQL_DATABASE: customer_data
+    networks:
+      - dmz-net
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./fake-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
+  fake-admin:
+    image: httpd:2.4
+    volumes:
+      - ./fake-admin:/usr/local/apache2/htdocs/
+    networks:
+      - dmz-net
+    ports:
+      - "8081:80"
+    restart: unless-stopped
 
   api-server-internal:
     build:
@@ -52,7 +86,6 @@ services:
     ports:
       - "5000:5000"
     restart: unless-stopped
-
   internal-server:
     image: ubuntu
     command: tail -f /dev/null
@@ -63,7 +96,7 @@ services:
     image: mysql:8.0.33
     command: --default-authentication-plugin=mysql_native_password
     environment:
-      MYSQL_ROOT_PASSWORD: 
+      MYSQL_ROOT_PASSWORD: seoiatum
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
@@ -81,6 +114,54 @@ services:
     networks:
       - internal-net
 
+  suricata:
+    image: jasonish/suricata:latest
+    command: -i eth0
+    networks:
+      - elk-net
+      - dmz-net
+    volumes:
+      - ./suricata/logs:/var/log/suricata
+      - ./suricata/etc:/etc/suricata
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    restart: unless-stopped
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    networks:
+      - elk-net
+    ports:
+      - "9200:9200"
+    restart: unless-stopped
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.17.0
+    volumes:
+      - /home/seisom/my-docker-network/logstash/pipeline:/usr/share/logstash/pipeline
+      - /home/seisom/my-docker-network/suricata/logs:/var/log/suricata
+    networks:
+      - elk-net
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.0
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - elk-net
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
 networks:
   dmz-net:
     driver: bridge
@@ -88,22 +169,32 @@ networks:
   internal-net:
     driver: bridge
 
+  elk-net:
+    driver: bridge
 ```
 
 ## 構成について
 この構成は、外部に公開してはいけない情報をやり取りするネットワークと、一部を外部に公開するネットワークを分けた構成です
 
 ### コンテナの区分
-| コンテナ名         | 用途                     | 所属ネットワーク | 備考                              |
-|--------------------|--------------------------|------------------|-----------------------------------|
-|api-server|クライアントからのリクエストを受け取る|DMZ用ネットワーク(dnz-net)||
-|api-server-internal|クライアントからのリクエストを受け取る|内部ネットワーク(internal-net)||
-| my-docker-network-internal-server-1 | 内部サーバ|内部ネットワーク(internal-net)| ubuntuベース         |
-| my-docker-network-internal-db-1 | 内部データベース |内部ネットワーク(internal-net)|mysql rootパスワード設定済み    |
-| my-docker-network-internal-client1-1|クライアント1|内部ネットワーク(internal-net)|alpine使用|
-|my-docker-network-internal-client2-1|クライアント2|内部ネットワーク(internal-net) | alpine使用  |
-|  my-docker-network-dmz-client-1| DMZ内での通信確認用、クライアントとしても機能|DMZ用（dmz-net)|alpine使用 |
-|my-docker-network-web-servs-1|webサーバとして使用|DMZ用ネットワーク(dmz-net)||
+| コンテナ名 | 用途 | 所属ネットワーク | 備考 |
+|-------------|------|------------------|------|
+| **api-server** | クライアントからのリクエストを受け取る DMZ 側 API サーバ | DMZ ネットワーク（`dmz-net`） | `Dockerfile.dmz` からビルド、ポート **4000** 番で公開 |
+| **web-servs** | Web サーバ（Nginx） | DMZ ネットワーク（`dmz-net`） | 静的コンテンツ配信に使用 |
+| **dmz-client** | DMZ 内での通信確認・検証用クライアント | DMZ ネットワーク（`dmz-net`） | `alpine` ベース |
+| **fake-api** | 疑似 API サーバ（テスト用） | DMZ ネットワーク（`dmz-net`） | ポート **7000** 番で公開、`Dockerfile.dmz` からビルド |
+| **fake-db** | 疑似データベース | DMZ ネットワーク（`dmz-net`） | MySQL 5.7、`init.sql` により初期化 |
+| **fake-admin** | 疑似管理用 Web サーバ | DMZ ネットワーク（`dmz-net`） | Apache 2.4、ポート **8081** 番で公開 |
+| **api-server-internal** | 内部ネットワーク側の API サーバ | 内部ネットワーク（`internal-net`） | `Dockerfile.internal` からビルド、ポート **5000** 番で公開 |
+| **internal-server** | 内部サーバ（通信・制御テスト用） | 内部ネットワーク（`internal-net`） | `ubuntu` ベース |
+| **internal-db** | 内部データベース | 内部ネットワーク（`internal-net`） | MySQL 8.0.33、root パスワード `seoiatum`、`init.sql` により初期化 |
+| **internal-client1** | 内部クライアント1 | 内部ネットワーク（`internal-net`） | `alpine` ベース |
+| **internal-client2** | 内部クライアント2 | 内部ネットワーク（`internal-net`） | `alpine` ベース |
+| **suricata** | IDS（侵入検知システム） | ELK ネットワーク（`elk-net`）、DMZ ネットワーク（`dmz-net`） | `/var/log/suricata` にログ出力、`NET_ADMIN` 権限付与 |
+| **elasticsearch** | ログ蓄積サーバ | ELK ネットワーク（`elk-net`） | ポート **9200** 番公開、単一ノード構成 |
+| **logstash** | ログ収集・変換 | ELK ネットワーク（`elk-net`） | Suricata のログを解析し Elasticsearch へ転送 |
+| **kibana** | ログ可視化ツール | ELK ネットワーク（`elk-net`） | ポート **5601** 番公開、Elasticsearch に接続 |
+
 
 
 
@@ -112,8 +203,9 @@ networks:
 ```bash
 $ docker network ls
 NETWORK ID     NAME                             DRIVER    SCOPE
-e1198e6d04aa   my-docker-network_dmz-net        bridge    local
-fba4cc2edb93   my-docker-network_internal-net   bridge    local
+b93162f2fe3a   my-docker-network_dmz-net        bridge    local
+4c76e2cb632f   my-docker-network_elk-net        bridge    local
+8771d012dc53   my-docker-network_internal-net   bridge    local
 
 ```
 ## 各ネットワークについて
@@ -122,6 +214,7 @@ fba4cc2edb93   my-docker-network_internal-net   bridge    local
 |----------------------|----------------------------------------------------|
 |my-docker-network_dmz-net  |DMZとして使用                | 
 | my-docker-network_internal-net|内部ネットワーク| 
+| my-docker-network_elk-net|監視ツール(ELKスタック+suricata)を実装し、ネットワーク通信を可視化・分析するために使用|
 
 ---
 
@@ -423,3 +516,147 @@ iptablesで設定したルールは、OSを再起動すると消えてしまい�
 ```bash
 $ sudo iptables-save | sudo tee /etc/iptables/rules.v4
 ```
+
+## 偽のサービスの設置とELKスタック+suricataの実装
+---
+- 目的
+  
+  外からの攻撃を想定し、ハニーボットのような役割を持つ偽のサービスの設置と、そこを通る通信の監視を行うツールの実装を行う。
+
+- 偽のサービスの設置について
+  ---
+  偽のサービスを設置する際は、本物のサービスを設置する際と動作はほとんど同じです。
+  だが、侵入されやすいサービス、ポートがあるため、それに基づいた設定をする必要があります。
+
+### ELSスタック+suricataの実装
+  ---
+  
+### ツール一覧
+
+| ツール名          | 概要 |           
+|---------------------|------------|
+| Suricata      | 通信を監視し、アラートやフロー情報を eve.json に出力    | 
+|Logstash       |  Suricataのログを収集・整形し、Elasticsearchへ送信 | 
+| Elasticsearch | 受信したログデータを保存・インデックス化 | 
+|Kibana|Elasticsearch上のデータを可視化|
+
+### 手順
+- suricata実装
+　通常は、サーバに直接インストールするものです。しかし、仮想環境なので今回はDockerコンテナ版を使用します。
+  docker-compose.ymlファイルの中に以下を書き足す
+  ```bash
+  suricata:
+    image: jasonish/suricata:latest
+    command: -i eth0
+    networks:
+      - elk-net
+      - dmz-net
+    volumes:
+      - ./suricata/logs:/var/log/suricata
+      - ./suricata/etc:/etc/suricata
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    restart: unless-stopped
+   ```
+その後、以下を実行する。また、
+  ```bash
+  mkdir -p ./suricata/etc
+   ```
+-p オプションによって、親ディレクトリが存在していなくてもまとめて作成できる。
+以下のコマンドで、作成したディレクトリに入る。
+  ```bash
+  mkdir ./suricata/etc
+   ```
+入ったディレクトリで以下を実行する。以下のコマンドでは、suricataルールを取得可能である。
+  ```bash
+  sudo wget https://rules.emergingthreats.net/open/suricata-6.0.0/emerging.rules.tar.gz
+
+   ```
+このルールをマウントすると、外部からの攻撃や不正通信を検知可能となる。
+
+- suricataのルールが読めない場合
+  suricataのルールが読めない原因として、emerging.rules.tar.gzが解凍されていない場合がある。その時は以下を実行する。
+  そのうえで、ルールを読み込む。
+  ```bash
+  tar zxvf emerging.rules.tar.gz
+   ```
+  
+### ELKスタックの実装 
+
+ 以下をdockerファイルの中に書き足す。
+ ```bash
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    networks:
+      - elk-net
+    ports:
+      - "9200:9200"
+    restart: unless-stopped
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.17.0
+    volumes:
+      - /home/seisom/my-docker-network/logstash/pipeline:/usr/share/logstash/pipeline
+      - /home/seisom/my-docker-network/suricata/logs:/var/log/suricata
+    networks:
+      - elk-net
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.0
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - elk-net
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+   ```
+ その後、以下のコマンドでLogstashのpipeline設定用のディレクトリを作成
+ ```bash
+ $mkdir -p logstash/pipeline
+   ```
+logstash/pipeline/suricata.confに以下を書き入れて保存
+ ```bash
+ input {
+  file {
+    path => "/var/log/suricata/eve.json"
+    codec => json
+  }
+}
+
+filter {
+  date {
+    match => [ "timestamp", "ISO8601" ]
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["http://elasticsearch:9200"]
+    index => "suricata-%{+YYYY.MM.dd}"
+  }
+}
+   ```
+elkディレクトリを作成する。
+ ```bash
+ $mkdir elk
+```
+elkディレクトリに入る。
+
+ ```bash
+ $cd elk
+   ```
+ ```bash
+以下のコマンドで、先ほどsっ呈したELKスタックが立ち上がる。
+ $docker compose up -d
+   ```
