@@ -187,7 +187,7 @@ networks:
 | **fake-admin** | 疑似管理用 Web サーバ | DMZ ネットワーク（`dmz-net`） | Apache 2.4、ポート **8081** 番で公開 |
 | **api-server-internal** | 内部ネットワーク側の API サーバ | 内部ネットワーク（`internal-net`） | `Dockerfile.internal` からビルド、ポート **5000** 番で公開 |
 | **internal-server** | 内部サーバ（通信・制御テスト用） | 内部ネットワーク（`internal-net`） | `ubuntu` ベース |
-| **internal-db** | 内部データベース | 内部ネットワーク（`internal-net`） | MySQL 8.0.33、root パスワード `seoiatum`、`init.sql` により初期化 |
+| **internal-db** | 内部データベース | 内部ネットワーク（`internal-net`） | MySQL 8.0.33、root パスワード (任意のものを使用)、`init.sql` により初期化 |
 | **internal-client1** | 内部クライアント1 | 内部ネットワーク（`internal-net`） | `alpine` ベース |
 | **internal-client2** | 内部クライアント2 | 内部ネットワーク（`internal-net`） | `alpine` ベース |
 | **suricata** | IDS（侵入検知システム） | ELK ネットワーク（`elk-net`）、DMZ ネットワーク（`dmz-net`） | `/var/log/suricata` にログ出力、`NET_ADMIN` 権限付与 |
