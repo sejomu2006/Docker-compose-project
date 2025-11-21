@@ -96,7 +96,7 @@ services:
     image: mysql:8.0.33
     command: --default-authentication-plugin=mysql_native_password
     environment:
-      MYSQL_ROOT_PASSWORD: seoiatum
+      MYSQL_ROOT_PASSWORD: #任意のパスワード
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
