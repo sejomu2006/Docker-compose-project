@@ -142,8 +142,8 @@ services:
   logstash:
     image: docker.elastic.co/logstash/logstash:7.17.0
     volumes:
-      - /home/seisom/my-docker-network/logstash/pipeline:/usr/share/logstash/pipeline
-      - /home/seisom/my-docker-network/suricata/logs:/var/log/suricata
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+      - ./suricata/logs:/var/log/suricata
     networks:
       - elk-net
     depends_on:
