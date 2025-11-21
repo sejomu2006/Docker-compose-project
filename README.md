@@ -350,7 +350,7 @@ PING 172.23.0.5 (172.23.0.5) 56(84) bytes of data.
 --- 172.23.0.5 ping statistics ---
 11 packets transmitted, 11 received, 0% packet loss, time 10370ms
 rtt min/avg/max/mdev = 0.066/0.142/0.682/0.172 ms
-seisom@LAPTOP-P5CT19JG:~/my-docker-network$
+$
 
 
 ```
@@ -600,8 +600,8 @@ $ sudo iptables-save | sudo tee /etc/iptables/rules.v4
   logstash:
     image: docker.elastic.co/logstash/logstash:7.17.0
     volumes:
-      - /home/seisom/my-docker-network/logstash/pipeline:/usr/share/logstash/pipeline
-      - /home/seisom/my-docker-network/suricata/logs:/var/log/suricata
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+      - ./suricata/logs:/var/log/suricata
     networks:
       - elk-net
     depends_on:
